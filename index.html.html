@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<title>피아노 코드 채점</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#eef1f6;--card:#fff;--ink:#14213d;--mute:#667085;--line:#d5dbe6;--acc:#14213d;--onacc:#fff;--ok:#12805c;--okbg:#d9f3e8;--warn:#b42318;--bad:#c62828;--badbg:#fde4e2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1220;--card:#182036;--ink:#eef1f8;--mute:#9aa4ba;--line:#2b3654;--acc:#eef1f8;--onacc:#14213d;--ok:#4fd6a4;--okbg:#123a2f;--warn:#ff8a80;--bad:#ff8a80;--badbg:#4a1f22}}
+:root[data-theme="dark"]{--bg:#0d1220;--card:#182036;--ink:#eef1f8;--mute:#9aa4ba;--line:#2b3654;--acc:#eef1f8;--onacc:#14213d;--ok:#4fd6a4;--okbg:#123a2f;--warn:#ff8a80;--bad:#ff8a80;--badbg:#4a1f22}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;-webkit-tap-highlight-color:transparent}
+#app{max-width:720px;margin:0 auto;padding:12px}
+button,select,textarea{font:inherit;color:inherit}
+button{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:12px 10px;cursor:pointer;touch-action:manipulation}
+button:focus-visible,select:focus-visible{outline:3px solid var(--ok);outline-offset:2px}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--acc);margin-bottom:10px}
+.tabs button{flex:1;font-weight:700;font-size:15px;padding:12px 4px;border-radius:12px 12px 0 0;border-bottom:none;background:var(--bg);color:var(--mute)}
+.tabs .on{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
+.row{display:flex;gap:8px;margin:10px 0}.row>*{flex:1}
+.pri,.opt .on{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
+select{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:12px 8px;font-size:17px;font-weight:600;width:100%}
+.score{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 16px;margin:10px 0}
+.score b{display:block;font-size:18px}.score span{color:var(--mute);font-size:14px}
+.pt{font-size:40px;font-weight:800;line-height:1;color:var(--ok)}.pt small{font-size:16px;margin-left:2px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
+.item b{display:block;margin-bottom:8px;font-size:17px}
+.opt{display:flex;gap:8px}.opt button{flex:1;font-size:20px;font-weight:700;padding:16px 0}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media(min-width:560px){.grid{grid-template-columns:repeat(8,1fr)}}
+.ch{position:relative;height:64px;font-size:22px;font-weight:700;padding:0;border-radius:10px}
+.ch i{position:absolute;top:4px;left:7px;font-size:11px;font-style:normal;color:var(--mute);font-weight:500}
+.ch.on{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+.ch em{position:absolute;right:6px;bottom:2px;font-size:14px;font-style:normal}
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;font-size:14px}
+td,th{padding:6px 4px;text-align:center;border-bottom:1px solid var(--line)}
+th{background:var(--bg);color:var(--mute)}
+textarea{width:100%;height:110px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:8px}
+.hint{color:var(--mute);font-size:14px;margin:6px 2px}
+.warn{color:var(--warn);border-color:var(--warn)}
+.wrap{overflow-x:auto}
+.modes{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.modes button{padding:8px 10px;font-size:14px}
+.modes .on{background:var(--acc);color:var(--onacc)}
+</style></head>
+<body><div id="app"></div>
+<script>
+const CH="C G Am Em F G C G C G Am Em F G C C C E Am Em F G C G C B Em A F F G G".split(" ");
+// 2차: 32개=15점, 30~31=14점, 아래로 2개마다 1점, 9개 이하=3점
+function s2(n){return n>=32?15:n>=10?Math.floor(n/2)-1:3}
+const KEY="pc-grade-v3";
+let data={};
+try{data=JSON.parse(localStorage.getItem(KEY)||"{}");
+ const old=JSON.parse(localStorage.getItem("pc-grade-v2")||"{}");
+ for(const q in old)if(!data[q])data[q]={w:old[q]};
+ localStorage.setItem(KEY,JSON.stringify(data));localStorage.removeItem("pc-grade-v2")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){}}
+let cls=1,num=1,tab="p1",mode="all",msg="",arm=false;
+const K=(c,n)=>c+"-"+n;
+const rec=(c=cls,n=num)=>data[K(c,n)]||{};
+const val=(f,c=cls,n=num)=>{const v=rec(c,n)[f];return v==null?5:v}; // 기본값 = 만점
+const wr=(c=cls,n=num)=>{const w=rec(c,n).w;return w?[...w].filter(x=>x==="1").length:0};
+const p1=(c=cls,n=num)=>val("p",c,n)+val("j",c,n)+val("m",c,n);
+const p2=(c=cls,n=num)=>s2(32-wr(c,n));
+const tot=(c=cls,n=num)=>p1(c,n)+p2(c,n)+val("a",c,n)+val("r",c,n);
+function set(f,v){const r=rec();r[f]=v;data[K(cls,num)]=r;save()}
+function clsSel(){return `<select id="cls">${[...Array(10)].map((_,i)=>`<option value="${i+1}"${cls==i+1?" selected":""}>${i+1}반</option>`).join("")}</select>`}
+function pick(f,label){const v=val(f);return `<div class="item"><b>${label}</b><div class="opt">${[5,4,3].map(x=>`<button data-f="${f}" data-v="${x}" class="${v==x?"on":""}">${x}점</button>`).join("")}</div></div>`}
+const MODES=[["all","전체"],["p1","1차 총점"],["d","1차 세부"],["p2","2차"],["a","참여도"],["r","성찰일지"]];
+function outText(){return [...Array(30)].map((_,i)=>{const n=i+1,c=cls;
+ return {all:[p1(c,n),p2(c,n),val("a",c,n),val("r",c,n)],p1:[p1(c,n)],d:[val("p",c,n),val("j",c,n),val("m",c,n)],p2:[p2(c,n)],a:[val("a",c,n)],r:[val("r",c,n)]}[mode].join("\t")}).join("\n")}
+function render(){
+  const T=[["p1","1차평가"],["p2","2차평가"],["pa","참여도·성찰일지"],["res","결과"]];
+  let h=`<div class="tabs">${T.map(t=>`<button data-t="${t[0]}" class="${tab==t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`;
+  if(tab!="res"){
+    h+=`<div class="row">${clsSel()}<select id="num">${[...Array(30)].map((_,i)=>`<option value="${i+1}"${num==i+1?" selected":""}>${i+1}번${data[K(cls,i+1)]?" ●":""}</option>`).join("")}</select></div>`;
+    h+=`<div class="score"><div><b>${cls}반 ${num}번</b><span>1차 ${p1()} · 2차 ${p2()} · 참여 ${val("a")} · 성찰 ${val("r")}</span></div><div class="pt">${tot()}<small>/40</small></div></div>`;
+    if(tab=="p1")h+=pick("p","자세")+pick("j","장3화음")+pick("m","단3화음")+`<p class="hint">기본값은 모두 5점(만점)이에요. 점수가 다른 항목만 바꾸세요. 1차 합계: ${p1()} / 15점</p>`;
+    if(tab=="pa")h+=pick("a","참여도")+pick("r","성찰일지")+`<p class="hint">기본값은 모두 5점(만점)이에요. 점수가 다른 항목만 바꾸세요.</p>`;
+    if(tab=="p2"){
+      const w=rec().w,b=w?[...w].map(x=>x==="1"):Array(32).fill(false),n=b.filter(Boolean).length;
+      h+=`<div class="hint">틀린 코드 ${n}개 · 맞은 코드 ${32-n}개 → ${p2()} / 15점</div>`;
+      h+=`<div class="grid">${CH.map((c,i)=>`<button class="ch${b[i]?" on":""}" data-i="${i}"><i>${i+1}</i>${c}${b[i]?"<em>✗</em>":""}</button>`).join("")}</div>`;
+      h+=`<div class="row"><button data-a="none">틀린 표시 모두 지우기</button></div>`;
+      h+=`<p class="hint">틀린 코드만 눌러 표시하세요(빨간색). 다시 누르면 해제돼요. 아무것도 누르지 않으면 15점(만점)이에요.</p>`;
+    }
+    h+=`<div class="row"><button data-a="prev">◀ 이전 번호</button><button class="pri" data-a="next">다음 번호 ▶</button></div>`;
+    h+=`<p class="hint">번호 옆 ●는 기본값(만점)에서 바뀐 학생이에요. 기록은 이 기기의 브라우저에 자동 저장됩니다.</p>`;
+  }else{
+    h+=`<div class="row">${clsSel()}</div>`;
+    h+=`<div class="wrap"><table><tr><th>번호</th><th>자세</th><th>장3</th><th>단3</th><th>1차</th><th>2차</th><th>참여</th><th>성찰</th><th>합계</th></tr>${[...Array(30)].map((_,i)=>{const n=i+1,c=cls;return `<tr><td>${n}</td><td>${val("p",c,n)}</td><td>${val("j",c,n)}</td><td>${val("m",c,n)}</td><td>${p1(c,n)}</td><td>${p2(c,n)}</td><td>${val("a",c,n)}</td><td>${val("r",c,n)}</td><td><b>${tot(c,n)}</b></td></tr>`}).join("")}</table></div>`;
+    h+=`<div class="modes">${MODES.map(m=>`<button data-m="${m[0]}" class="${mode==m[0]?"on":""}">${m[1]}</button>`).join("")}</div>`;
+    h+=`<textarea id="out" readonly>${outText()}</textarea>`;
+    h+=`<div class="row"><button class="pri" data-a="copy">복사하기</button><button data-a="reset" class="${arm?"warn":""}">${arm?"한 번 더 누르면 "+cls+"반 초기화":cls+"반 모두 만점으로 초기화"}</button></div>`;
+    h+=`<p class="hint">${msg||"원하는 항목을 고르고 복사한 뒤, 엑셀의 해당 열 1번 칸에 붙여넣으면 30명이 한 번에 들어가요. ‘전체’는 1차·2차·참여도·성찰일지 순서(4열)예요."}</p>`;
+  }
+  document.getElementById("app").innerHTML=h;
+}
+const app=document.getElementById("app");
+app.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;const d=t.dataset;
+  if(d.t){tab=d.t;msg="";arm=false}
+  else if(d.f){set(d.f,+d.v)}
+  else if(d.i!==undefined){const w=rec().w||"0".repeat(32),b=[...w];b[+d.i]=b[+d.i]==="1"?"0":"1";set("w",b.join(""))}
+  else if(d.m){mode=d.m;msg=""}
+  else if(d.a=="none")set("w","0".repeat(32));
+  else if(d.a=="next"){num=Math.min(30,num+1);window.scrollTo(0,0)}
+  else if(d.a=="prev"){num=Math.max(1,num-1);window.scrollTo(0,0)}
+  else if(d.a=="copy"){const x=outText();document.getElementById("out").select();
+    const done=()=>{msg="복사됐어요. 엑셀에 붙여넣기 하세요.";render()};
+    const fail=()=>{msg="자동 복사가 막혔어요. 글상자를 길게 눌러 ‘복사’를 선택하세요.";render()};
+    const old=()=>{let ok=false;try{ok=document.execCommand("copy")}catch(z){}ok?done():fail()};
+    if(navigator.clipboard)navigator.clipboard.writeText(x).then(done,old);else old();
+    return}
+  else if(d.a=="reset"){if(!arm)arm=true;else{for(let i=1;i<=30;i++)delete data[K(cls,i)];save();arm=false;msg="초기화했어요."}}
+  render();
+});
+app.addEventListener("change",e=>{
+  if(e.target.id=="cls"){cls=+e.target.value;arm=false;msg=""}
+  if(e.target.id=="num")num=+e.target.value;
+  render();
+});
+render();
+</script></body></html>
